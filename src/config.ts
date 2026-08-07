@@ -28,10 +28,17 @@ export type Config = z.infer<typeof schema>;
  * it will never use.
  */
 export function loadConfig(required: 'all' | 'spotify-only' = 'all'): Config {
+  // A blank line in .env (`FOO=`) becomes an empty string, not an absent key.
+  // Treating those as unset is what lets zod defaults apply and what keeps the
+  // placeholders below from being clobbered by a not-yet-filled-in .env.
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter(([, value]) => value !== undefined && value !== ''),
+  );
+
   const source =
     required === 'spotify-only'
-      ? { DISCORD_TOKEN: 'unused', DISCORD_CLIENT_ID: 'unused', ...process.env }
-      : process.env;
+      ? { DISCORD_TOKEN: 'unused', DISCORD_CLIENT_ID: 'unused', ...env }
+      : env;
 
   const result = schema.safeParse(source);
   if (!result.success) {
