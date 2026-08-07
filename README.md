@@ -109,7 +109,18 @@ check **Refresh Token Lifetime** on your app's Basic Information page; developme
 180 days. When it lapses the bot logs a token-refresh failure telling you to re-run this command.
 Revoking access or changing the requested scopes also invalidates the token.
 
-### 5. Register the slash commands and run
+### 5. Check your setup
+
+```bash
+npm run doctor
+```
+
+This verifies every credential against the live Discord and Spotify APIs, confirms the bot has
+been invited to your server, checks the bundled yt-dlp and ffmpeg binaries, and prints the
+remaining steps in order. Run it whenever something isn't working — it is faster than reading
+logs. It is read-only and safe to run at any time.
+
+### 6. Register the slash commands and run
 
 ```bash
 npm run commands

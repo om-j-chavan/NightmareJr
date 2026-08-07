@@ -8,6 +8,7 @@
     "node": ">=20.0.0"
   },
   "scripts": {
+    "doctor": "tsx src/doctor.ts",
     "auth": "tsx src/auth/server.ts",
     "commands": "tsx src/bot/deploy-commands.ts",
     "dev": "tsx watch src/index.ts",
