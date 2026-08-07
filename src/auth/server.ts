@@ -10,8 +10,11 @@ const log = createLogger('auth');
  * One-shot script that walks the Spotify authorization-code flow and prints a
  * refresh token to paste into .env.
  *
- * Run it once per Spotify account. The refresh token does not expire on its
- * own — you only need to redo this if you revoke access or change scopes.
+ * Run it once per Spotify account, then again whenever the token stops
+ * working. Spotify applies a refresh-token lifetime per app — 180 days on a
+ * development-mode app, shown on the dashboard's Basic Information page — so
+ * this is not strictly a one-time step. Revoking access or changing the
+ * requested scopes also invalidates it.
  */
 async function main(): Promise<void> {
   const config = loadConfig('spotify-only');

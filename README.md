@@ -102,8 +102,12 @@ npm run auth
 ```
 
 This prints a URL. Open it, approve access, and the script prints a `SPOTIFY_REFRESH_TOKEN`.
-Paste that into `.env`. You only need to do this once — the refresh token does not expire unless
-you revoke it.
+Paste that into `.env`.
+
+You will need to repeat this occasionally. Spotify enforces a refresh-token lifetime per app —
+check **Refresh Token Lifetime** on your app's Basic Information page; development-mode apps show
+180 days. When it lapses the bot logs a token-refresh failure telling you to re-run this command.
+Revoking access or changing the requested scopes also invalidates the token.
 
 ### 5. Register the slash commands and run
 
@@ -185,8 +189,8 @@ npm start          # run the compiled build
 
 **"SPOTIFY_REFRESH_TOKEN is not set"** — run `npm run auth`.
 
-**Token refresh failed (400)** — the refresh token was revoked or the client secret changed.
-Run `npm run auth` again.
+**Token refresh failed (400)** — the refresh token hit its lifetime, was revoked, or the client
+secret changed. Run `npm run auth` again and paste the new token into `.env`.
 
 **Slash commands don't appear** — run `npm run commands`. Without `DISCORD_GUILD_ID` set, global
 registration can take up to an hour.
