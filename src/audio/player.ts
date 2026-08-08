@@ -10,6 +10,7 @@ import {
 } from '@discordjs/voice';
 import { createLogger } from '../logger.js';
 import { hasLibopus, spawnStream, type FfmpegProcess } from './ffmpeg.js';
+import type { ResolvedAudio } from './resolver.js';
 
 const log = createLogger('player');
 
@@ -28,9 +29,9 @@ export class SeekablePlayer {
   private resource: AudioResource | null = null;
   /** Offset the current resource was started at, in ms. */
   private seekOffsetMs = 0;
-  private currentUrl: string | null = null;
+  private current: ResolvedAudio | null = null;
 
-  constructor() {
+  constructor(private readonly bitrate = '128k') {
     this.player = createAudioPlayer({
       behaviors: {
         // Keep the stream running when the channel empties, so returning
@@ -62,16 +63,23 @@ export class SeekablePlayer {
     return this.player.state.status === AudioPlayerStatus.Paused;
   }
 
-  /** Starts (or restarts) `url` at `seekMs`. */
-  play(url: string, seekMs: number): void {
+  /** Starts (or restarts) `audio` at `seekMs`. */
+  play(audio: ResolvedAudio, seekMs: number): void {
     this.teardown();
 
-    this.process = spawnStream({ url, seekMs });
+    this.process = spawnStream({
+      url: audio.streamUrl,
+      seekMs,
+      copyOpus: audio.isOpus,
+      bitrate: this.bitrate,
+    });
     this.seekOffsetMs = seekMs;
-    this.currentUrl = url;
+    this.current = audio;
 
+    // A remuxed source is Ogg/Opus by construction; a transcode is only Ogg
+    // when ffmpeg had libopus to encode with.
     this.resource = createAudioResource(this.process.stdout, {
-      inputType: hasLibopus() ? StreamType.OggOpus : StreamType.Raw,
+      inputType: audio.isOpus || hasLibopus() ? StreamType.OggOpus : StreamType.Raw,
     });
 
     this.player.play(this.resource);
@@ -80,9 +88,9 @@ export class SeekablePlayer {
 
   /** Repositions within the track already loaded. No-op if nothing is loaded. */
   seek(seekMs: number): void {
-    if (!this.currentUrl) return;
+    if (!this.current) return;
     log.info(`Re-seeking to ${Math.round(seekMs / 1000)}s`);
-    this.play(this.currentUrl, seekMs);
+    this.play(this.current, seekMs);
   }
 
   pause(): void {
@@ -96,7 +104,7 @@ export class SeekablePlayer {
   stop(): void {
     this.player.stop(true);
     this.teardown();
-    this.currentUrl = null;
+    this.current = null;
     this.seekOffsetMs = 0;
   }
 

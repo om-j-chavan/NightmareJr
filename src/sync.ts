@@ -33,7 +33,17 @@ export class SyncEngine extends EventEmitter<SyncEvents> {
   readonly player = new SeekablePlayer();
 
   private connection: VoiceConnection | null = null;
+  /** The track Spotify says we should be on. Set as soon as a change is seen. */
   private activeTrackId: string | null = null;
+  /**
+   * The track whose audio is actually loaded in the player.
+   *
+   * Distinct from `activeTrackId` because resolving a track takes seconds. In
+   * that window the two disagree, and position corrections must be suppressed
+   * — otherwise they compare the new track's position against the old track's
+   * stream and "correct" a drift of an entire song length.
+   */
+  private playingTrackId: string | null = null;
   private currentTrack: SpotifyTrack | null = null;
   /** Guards against overlapping resolves when tracks change rapidly. */
   private resolveGeneration = 0;
@@ -53,6 +63,7 @@ export class SyncEngine extends EventEmitter<SyncEvents> {
     // Forget prior state so the current track is re-announced and re-synced.
     this.watcher.reset();
     this.activeTrackId = null;
+    this.playingTrackId = null;
     this.watcher.start();
     log.info('Sync attached to voice connection');
   }
@@ -63,6 +74,7 @@ export class SyncEngine extends EventEmitter<SyncEvents> {
     this.connection?.destroy();
     this.connection = null;
     this.activeTrackId = null;
+    this.playingTrackId = null;
     this.currentTrack = null;
     this.resolveGeneration += 1;
     this.emit('stopped');
@@ -85,13 +97,14 @@ export class SyncEngine extends EventEmitter<SyncEvents> {
    */
   forceResync(): void {
     this.activeTrackId = null;
+    this.playingTrackId = null;
     this.watcher.reset();
   }
 
   private wire(): void {
     this.watcher.on('trackChanged', (state) => void this.startTrack(state));
-    this.watcher.on('seeked', (state) => this.alignPosition(state, true));
-    this.watcher.on('tick', (state) => this.alignPosition(state, false));
+    this.watcher.on('seeked', (state) => this.alignPosition(state, 'seek'));
+    this.watcher.on('tick', (state) => this.alignPosition(state, 'tick'));
 
     this.watcher.on('paused', () => {
       log.info('Spotify paused → pausing Discord');
@@ -101,13 +114,14 @@ export class SyncEngine extends EventEmitter<SyncEvents> {
     this.watcher.on('resumed', (state) => {
       log.info('Spotify resumed → resuming Discord');
       this.player.resume();
-      this.alignPosition(state, true);
+      this.alignPosition(state, 'resume');
     });
 
     this.watcher.on('idle', () => {
       log.info('Spotify idle → stopping Discord playback');
       this.player.stop();
       this.activeTrackId = null;
+      this.playingTrackId = null;
       this.currentTrack = null;
     });
 
@@ -117,6 +131,8 @@ export class SyncEngine extends EventEmitter<SyncEvents> {
   private async startTrack(state: PlaybackState): Promise<void> {
     const generation = ++this.resolveGeneration;
     this.activeTrackId = state.track.id;
+    // Nothing valid is loaded for this track until the resolve completes.
+    this.playingTrackId = null;
     this.currentTrack = state.track;
 
     try {
@@ -129,7 +145,10 @@ export class SyncEngine extends EventEmitter<SyncEvents> {
       }
 
       const target = this.targetPosition(state);
-      this.player.play(audio.streamUrl, target);
+      this.player.play(audio, target);
+      // Only now is the player genuinely on this track, so position
+      // corrections may resume.
+      this.playingTrackId = state.track.id;
 
       if (!state.isPlaying) this.player.pause();
 
@@ -151,22 +170,26 @@ export class SyncEngine extends EventEmitter<SyncEvents> {
   /**
    * Nudges the Discord stream back onto Spotify's clock.
    *
-   * `force` re-seeks regardless of drift, for events where we know the
-   * position jumped. Otherwise a tolerance avoids re-seeking on the constant
-   * sub-second jitter of polling a remote API.
+   * Every re-seek kills and respawns ffmpeg, which is audible, so this is
+   * deliberately reluctant: it acts only on a stream that is genuinely the
+   * current track, and only when the gap exceeds the tolerance. Even a `seek`
+   * or `resume` — where the position is known to have jumped — still has to
+   * clear the tolerance, because Spotify reports those events with the same
+   * few-hundred-millisecond jitter as any other poll, and re-seeking on that
+   * jitter produces a stutter far worse than the drift it corrects.
    */
-  private alignPosition(state: PlaybackState, force: boolean): void {
-    if (state.track.id !== this.activeTrackId) return;
-    if (!state.isPlaying && !force) return;
+  private alignPosition(state: PlaybackState, reason: 'tick' | 'seek' | 'resume'): void {
+    // Suppress corrections while a track change is still resolving.
+    if (state.track.id !== this.playingTrackId) return;
+    if (!state.isPlaying) return;
 
     const target = this.targetPosition(state);
     const drift = target - this.player.position();
 
-    if (!force && Math.abs(drift) <= this.options.driftToleranceMs) return;
+    if (Math.abs(drift) <= this.options.driftToleranceMs) return;
 
-    log.debug(`Drift ${Math.round(drift)}ms → re-seeking`);
+    log.debug(`Drift ${Math.round(drift)}ms on ${reason} → re-seeking`);
     this.player.seek(Math.max(0, target));
-    if (!state.isPlaying) this.player.pause();
   }
 
   /** Spotify's reported progress, advanced to account for our own latency. */

@@ -23,6 +23,12 @@ export interface ResolvedAudio {
   streamUrl: string;
   sourceTitle: string;
   durationMs: number;
+  /**
+   * True when the source is already Opus, which is exactly what Discord wants.
+   * Such a stream can be remuxed rather than re-encoded, avoiding a needless
+   * lossy generation.
+   */
+  isOpus: boolean;
 }
 
 export class NoAudioSourceError extends Error {}
@@ -58,7 +64,7 @@ export class AudioResolver {
 
     const raw = await this.runYtDlp(query);
     const firstLine = raw.trim().split('\n')[0] ?? '';
-    const [streamUrl, title, duration] = firstLine.split(FIELD_SEP);
+    const [streamUrl, title, duration, acodec] = firstLine.split(FIELD_SEP);
 
     if (!streamUrl?.startsWith('http')) {
       throw new NoAudioSourceError(`No playable source found for "${query}"`);
@@ -69,10 +75,15 @@ export class AudioResolver {
       streamUrl,
       sourceTitle: title || query,
       durationMs: Number.isFinite(seconds) ? seconds * 1000 : 0,
+      isOpus: (acodec ?? '').toLowerCase().startsWith('opus'),
     };
 
     this.cache.set(track.id, { value: resolved, expiresAt: Date.now() + this.cacheTtlMs });
-    log.info(`Resolved "${query}" → ${resolved.sourceTitle}`);
+    log.info(
+      `Resolved "${query}" → ${resolved.sourceTitle} [${acodec ?? 'unknown'}${
+        resolved.isOpus ? ', remuxing' : ', transcoding'
+      }]`,
+    );
     return resolved;
   }
 
@@ -84,7 +95,7 @@ export class AudioResolver {
       '--format',
       'bestaudio[acodec=opus]/bestaudio/best',
       '--print',
-      `%(urls)s${FIELD_SEP}%(title)s${FIELD_SEP}%(duration)s`,
+      `%(urls)s${FIELD_SEP}%(title)s${FIELD_SEP}%(duration)s${FIELD_SEP}%(acodec)s`,
     ];
 
     try {

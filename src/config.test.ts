@@ -56,7 +56,7 @@ describe('loadConfig', () => {
 
     const config = loadConfig();
 
-    expect(config.POLL_INTERVAL_MS).toBe(2000);
+    expect(config.POLL_INTERVAL_MS).toBe(1000);
     expect(config.DRIFT_TOLERANCE_MS).toBe(2500);
     expect(config.LOG_LEVEL).toBe('info');
   });

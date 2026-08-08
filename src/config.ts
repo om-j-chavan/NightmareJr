@@ -11,7 +11,7 @@ const schema = z.object({
   SPOTIFY_REDIRECT_URI: z.string().url().default('http://127.0.0.1:8888/callback'),
   SPOTIFY_REFRESH_TOKEN: z.string().optional(),
 
-  POLL_INTERVAL_MS: z.coerce.number().int().min(1000).default(2000),
+  POLL_INTERVAL_MS: z.coerce.number().int().min(1000).default(1000),
   DRIFT_TOLERANCE_MS: z.coerce.number().int().min(500).default(2500),
   SEEK_LATENCY_MS: z.coerce.number().int().min(0).default(800),
 

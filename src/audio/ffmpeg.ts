@@ -43,6 +43,16 @@ export interface StreamSpec {
   url: string;
   /** Where to start playback within the source, in milliseconds. */
   seekMs: number;
+  /**
+   * Set when the source is already Opus, allowing a straight remux.
+   *
+   * Discord consumes Opus, and YouTube's best audio is usually Opus already,
+   * so decoding and re-encoding it only adds a lossy generation and CPU load
+   * for no benefit.
+   */
+  copyOpus?: boolean;
+  /** Bitrate for the transcode path. Ignored when remuxing. */
+  bitrate?: string;
 }
 
 /**
@@ -52,7 +62,12 @@ export interface StreamSpec {
  * everything up to the offset — the difference between instant and unusable on
  * a long track.
  */
-export function spawnStream({ url, seekMs }: StreamSpec): FfmpegProcess {
+export function spawnStream({
+  url,
+  seekMs,
+  copyOpus = false,
+  bitrate = '128k',
+}: StreamSpec): FfmpegProcess {
   const seekSeconds = Math.max(0, seekMs / 1000).toFixed(3);
 
   const args = [
@@ -65,14 +80,17 @@ export function spawnStream({ url, seekMs }: StreamSpec): FfmpegProcess {
     '-ss', seekSeconds,
     '-i', url,
     '-vn',
-    '-ar', '48000',
-    '-ac', '2',
   ];
 
-  if (hasLibopus()) {
-    args.push('-c:a', 'libopus', '-b:a', '128k', '-f', 'ogg');
+  if (copyOpus) {
+    // Straight passthrough: no decode, no re-encode, no quality loss. Sample
+    // rate and channel flags are deliberately omitted — they would force a
+    // decode and defeat the point.
+    args.push('-c:a', 'copy', '-f', 'ogg');
+  } else if (hasLibopus()) {
+    args.push('-ar', '48000', '-ac', '2', '-c:a', 'libopus', '-b:a', bitrate, '-f', 'ogg');
   } else {
-    args.push('-f', 's16le');
+    args.push('-ar', '48000', '-ac', '2', '-f', 's16le');
   }
 
   args.push('pipe:1');
