@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { exec } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { loadConfig } from '../config.js';
 import { createLogger } from '../logger.js';
@@ -71,8 +72,10 @@ async function main(): Promise<void> {
     server.on('error', reject);
     server.listen(port, '127.0.0.1', () => {
       log.info(`Listening on http://127.0.0.1:${port}`);
-      console.log('\nOpen this URL in your browser and approve access:\n');
+      console.log('\nApprove access in the browser window that just opened.');
+      console.log('If it did not open, paste this URL yourself:\n');
       console.log(`  ${authorizeUrl.toString()}\n`);
+      openInBrowser(authorizeUrl.toString());
     });
   });
 
@@ -108,6 +111,21 @@ async function exchangeCode(
   const json = (await res.json()) as { refresh_token?: string };
   if (!json.refresh_token) throw new Error('Spotify did not return a refresh token.');
   return json.refresh_token;
+}
+
+/**
+ * Best-effort launch of the system browser.
+ *
+ * Purely a convenience — the URL is always printed too, so a failure here
+ * costs the user a copy-paste rather than the flow.
+ */
+function openInBrowser(url: string): void {
+  const command =
+    process.platform === 'win32' ? 'start ""' : process.platform === 'darwin' ? 'open' : 'xdg-open';
+
+  exec(`${command} "${url}"`, (error) => {
+    if (error) log.debug(`Could not open a browser automatically: ${error.message}`);
+  });
 }
 
 function page(message: string): string {

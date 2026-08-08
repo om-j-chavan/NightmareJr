@@ -82,11 +82,12 @@ async function checkDiscordToken(): Promise<string | undefined> {
 async function checkGuild(token: string | undefined): Promise<void> {
   const guildId = env('DISCORD_GUILD_ID');
   if (!guildId) {
+    // Optional: without it commands register globally, which still works but
+    // can take up to an hour to appear. Not worth blocking a first run on.
     record(
       'Discord server ID',
-      'todo',
-      'not set',
-      'Discord → Settings → Advanced → Developer Mode ON, then right-click your server → Copy Server ID',
+      'ok',
+      'not set (optional — slash commands will take up to 1h to appear)',
     );
     return;
   }
