@@ -88,11 +88,30 @@ async function handleJoin(
     selfDeaf: true,
   });
 
+  // The voice handshake has several stages and can stall in any of them, so
+  // trace the transitions — without this a timeout tells you nothing about
+  // which stage failed.
+  connection.on('stateChange', (from, to) => {
+    log.debug(`Voice connection: ${from.status} → ${to.status}`);
+  });
+  connection.on('error', (error) => {
+    log.error(`Voice connection error: ${error.message}`);
+  });
+
   try {
     await entersState(connection, VoiceConnectionStatus.Ready, 20_000);
   } catch {
+    const reached = connection.state.status;
     connection.destroy();
-    await interaction.editReply('Could not connect to the voice channel in time.');
+    log.error(
+      `Voice connection never became ready; stalled at "${reached}". ` +
+        `If this is "signalling", Discord never sent an endpoint. If it is ` +
+        `"connecting", the UDP handshake to Discord's voice server failed — ` +
+        `usually a firewall or NAT blocking outbound UDP.`,
+    );
+    await interaction.editReply(
+      `Could not connect in time (stalled at \`${reached}\`). Check the terminal for details.`,
+    );
     return;
   }
 
