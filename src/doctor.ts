@@ -136,6 +136,19 @@ async function checkSpotifyApp(): Promise<boolean> {
     return false;
   }
 
+  // Both values are 32-character hex strings, so pasting the ID into the
+  // secret field is an easy and near-invisible mistake. Spotify's reply to it
+  // is a bare "invalid_client", which does not hint at the cause.
+  if (id === secret) {
+    record(
+      'Spotify app credentials',
+      'fail',
+      'the client secret is identical to the client ID',
+      'These are different values. On the dashboard, click "View client secret" — a second, different string appears below the Client ID. Copy that one.',
+    );
+    return false;
+  }
+
   // client_credentials proves the id/secret pair is valid without needing the
   // user to have authorized anything yet.
   try {
