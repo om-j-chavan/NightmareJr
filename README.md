@@ -127,6 +127,17 @@ npm run commands
 npm run dev
 ```
 
+## Running it day to day
+
+On Windows, double-click **`start.bat`**. It verifies `.env` exists, installs dependencies if
+they are missing, builds, and starts the bot. Closing the window stops the bot.
+
+To start it automatically when Windows boots, press `Win+R`, run `shell:startup`, and put a
+shortcut to `start.bat` in the folder that opens.
+
+Either way the bot only runs while that window is open — see
+[the hosting note](#the-bot-only-runs-while-something-is-running-it) below.
+
 ## Usage
 
 Join a voice channel, then:
@@ -140,6 +151,20 @@ Join a voice channel, then:
 
 Now just play something on Spotify. Skipping, pausing and scrubbing all propagate within about
 one poll interval.
+
+## The bot only runs while something is running it
+
+A Discord bot holds a permanent gateway connection and, here, polls Spotify every second. There
+is no "deploy once and forget" for this — some machine has to stay awake. Close the window, sleep
+the PC, or lose the network, and the bot goes offline.
+
+That rules out serverless hosts (Vercel, Netlify, Lambda) entirely, and not only because
+functions are short-lived: Discord voice runs over UDP, which those platforms do not offer at
+all. A slash-command-only bot works fine there; a voice bot cannot.
+
+Options that do work: leave `start.bat` running on your PC, a Raspberry Pi, an always-free
+Oracle Cloud VM, or any small VPS. On a headless server run `npm run auth` locally first and
+copy the resulting `SPOTIFY_REFRESH_TOKEN` over — the token is not tied to a machine.
 
 ## Configuration
 
